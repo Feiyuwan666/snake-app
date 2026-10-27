@@ -4,14 +4,14 @@
 
 ## 下载安装
 
-👉 打开 **[Releases · apk-latest](../../releases/tag/apk-latest)** → 点 `snake.apk` 下载
+👉 打开 **[Releases · apk-latest](../../releases/tag/apk-latest)** → 点 `app-debug.apk` 下载
 
 装到华为手机（HarmonyOS）前要做两件事：
 
 1. 关闭纯净模式：**设置 → 系统和更新 → 纯净模式 → 退出**
 2. 授权安装来源：**设置 → 安全 → 更多安全设置 → 安装外部来源应用 → 文件管理 → 打开**
 
-然后到文件管理里点 `snake.apk` → 继续安装 → 桌面上出现「贪吃蛇」图标。
+然后到文件管理里点 `app-debug.apk` → 继续安装 → 桌面上出现「贪吃蛇」图标。
 
 > ⚠️ 别用微信 / QQ 传 APK，它们会把文件名改成 `.apk.1` 导致装不上。用数据线、网盘，或者直接在手机浏览器打开本页下载。
 
@@ -21,7 +21,7 @@
 
 ## 改游戏
 
-改 `www/index.html`，提交到 `main` 分支，Actions 会自动重新打包，几分钟后 Releases 里的 `snake.apk` 就更新了。
+改 `www/index.html`，提交到 `main` 分支，Actions 会自动重新打包，几分钟后 Releases 里的 `app-debug.apk` 就更新了。
 
 ## 工程结构
 
