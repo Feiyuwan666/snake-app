@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>贪吃蛇</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #111; overflow: hidden;
+    touch-action: none; -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent; }
+  #wrap { height: 100%; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; font-family: sans-serif; color: #eee; }
+  #score { margin-bottom: 10px; font-size: 18px; color: #9f9; }
+  canvas { background: #000; border-radius: 10px; box-shadow: 0 0 24px rgba(90,255,130,.15); }
+  #tip { margin-top: 12px; font-size: 13px; color: #777; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="score">得分: 0 · 最高: 0</div>
+  <canvas id="game"></canvas>
+  <div id="tip">滑动屏幕或按方向键控制</div>
+</div>
+<script>
+(function () {
+"use strict";
+
+var canvas = document.getElementById('game');
+var ctx = canvas.getContext('2d');
+var scoreEl = document.getElementById('score');
+
+var GRID = 20;          // 20 x 20 个格子
+var CELL = 16;          // 每个格子的像素大小（自动按屏幕计算）
+var TICK = 150;         // 每步毫秒数，数字越小蛇跑得越快
+
+var snake, dir, nextDir, food, score, best, timer = null;
+var state = 'ready';    // ready 准备 / playing 进行中 / over 结束
+
+try { best = parseInt(localStorage.getItem('snake_best') || '0', 10) || 0; } catch (e) { best = 0; }
+
+/* ---------- 尺寸自适应 ---------- */
+function applySize() {
+  var size = Math.min(window.innerWidth - 24, window.innerHeight - 140);
+  CELL = Math.max(10, Math.floor(size / GRID));
+  canvas.width = CELL * GRID;
+  canvas.height = CELL * GRID;
+}
+
+/* ---------- 重新开始一局 ---------- */
+function reset() {
+  snake = [{ x: 6, y: 10 }, { x: 5, y: 10 }, { x: 4, y: 10 }];
+  dir = { x: 1, y: 0 };
+  nextDir = { x: 1, y: 0 };
+  score = 0;
+  state = 'ready';
+  if (timer) { clearInterval(timer); timer = null; }
+  placeFood();
+  updateHud();
+  draw();
+}
+
+function updateHud() {
+  scoreEl.textContent = '得分: ' + score + ' · 最高: ' + best;
+}
+
+/* ---------- 随机放食物 ---------- */
+function placeFood() {
+  var free = [];
+  for (var x = 0; x < GRID; x++) {
+    for (var y = 0; y < GRID; y++) {
+      var taken = false;
+      for (var i = 0; i < snake.length; i++) {
+        if (snake[i].x === x && snake[i].y === y) { taken = true; break; }
+      }
+      if (!taken) { free.push({ x: x, y: y }); }
+    }
+  }
+  if (free.length === 0) { food = { x: -1, y: -1 }; return; }
+  food = free[Math.floor(Math.random() * free.length)];
+}
+
+/* ---------- 主循环 ---------- */
+function tick() {
+  dir = nextDir;
+  var head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+  // 撞墙
+  if (head.x < 0 || head.x >= GRID || head.y < 0 || head.y >= GRID) { return gameOver(); }
+
+  // 撞自己（尾巴马上会挪走，不算）
+  for (var i = 0; i < snake.length - 1; i++) {
+    if (snake[i].x === head.x && snake[i].y === head.y) { return gameOver(); }
+  }
+
+  var eat = (head.x === food.x && head.y === food.y);
+  snake.unshift(head);
+  if (eat) {
+    score++;
+    if (score > best) {
+      best = score;
+      try { localStorage.setItem('snake_best', String(best)); } catch (e) {}
+    }
+    updateHud();
+    placeFood();
+  } else {
+    snake.pop();
+  }
+  draw();
+}
+
+function gameOver() {
+  state = 'over';
+  if (timer) { clearInterval(timer); timer = null; }
+  draw();
+}
+
+/* ---------- 方向控制 ---------- */
+function setDir(dx, dy) {
+  if (state === 'over') { return; }
+  if (dx === -dir.x && dy === -dir.y) { return; }         // 不能直接掉头
+  if (dx === -nextDir.x && dy === -nextDir.y) { return; } // 防止一帧内连转两次撞到自己
+  nextDir = { x: dx, y: dy };
+  if (state === 'ready') {
+    state = 'playing';
+    if (!timer) { timer = setInterval(tick, TICK); }
+  }
+}
+
+/* ---------- 画图 ---------- */
+function draw() {
+  var w = canvas.width;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, w, w);
+
+  // 食物
+  ctx.fillStyle = '#e53935';
+  ctx.fillRect(food.x * CELL + 2, food.y * CELL + 2, CELL - 4, CELL - 4);
+
+  // 蛇
+  for (var i = 0; i < snake.length; i++) {
+    ctx.fillStyle = (i === 0) ? '#7CFC00' : '#3CB371';
+    ctx.fillRect(snake[i].x * CELL + 2, snake[i].y * CELL + 2, CELL - 4, CELL - 4);
+  }
+
+  if (state === 'ready') {
+    overlay('滑动屏幕或按方向键\n开始游戏');
+  } else if (state === 'over') {
+    overlay('游戏结束\n得分 ' + score + '\n点击屏幕重新开始');
+  }
+}
+
+function overlay(text) {
+  var w = canvas.width;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(0, 0, w, w);
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = Math.floor(w / 18) + 'px sans-serif';
+  var lines = text.split('\n');
+  var lh = Math.floor(w / 13);
+  var y0 = w / 2 - (lines.length - 1) * lh / 2;
+  for (var i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i], w / 2, y0 + i * lh);
+  }
+}
+
+/* ---------- 键盘（电脑上测试用） ---------- */
+document.addEventListener('keydown', function (e) {
+  var k = e.key;
+  var dx = 0, dy = 0;
+  if (k === 'ArrowUp' || k === 'w' || k === 'W') { dy = -1; }
+  else if (k === 'ArrowDown' || k === 's' || k === 'S') { dy = 1; }
+  else if (k === 'ArrowLeft' || k === 'a' || k === 'A') { dx = -1; }
+  else if (k === 'ArrowRight' || k === 'd' || k === 'D') { dx = 1; }
+  else if (k === ' ' || k === 'Enter') {
+    if (state === 'over') { reset(); }
+    e.preventDefault();
+    return;
+  } else { return; }
+  e.preventDefault();
+  if (state === 'over') { reset(); }
+  setDir(dx, dy);
+});
+
+/* ---------- 触屏（手机上玩） ---------- */
+var sx = 0, sy = 0, touching = false;
+document.addEventListener('touchstart', function (e) {
+  if (state === 'over') { reset(); }
+  var t = e.changedTouches[0];
+  sx = t.clientX; sy = t.clientY;
+  touching = true;
+}, { passive: true });
+
+document.addEventListener('touchend', function (e) {
+  if (!touching) { return; }
+  touching = false;
+  var t = e.changedTouches[0];
+  var dx = t.clientX - sx, dy = t.clientY - sy;
+  var ax = Math.abs(dx), ay = Math.abs(dy);
+  if (ax < 24 && ay < 24) { return; }   // 只是点了一下，不算滑动
+  if (ax > ay) { setDir(dx > 0 ? 1 : -1, 0); }
+  else { setDir(0, dy > 0 ? 1 : -1); }
+}, { passive: true });
+
+document.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+document.addEventListener('mousedown', function () { if (state === 'over') { reset(); } });
+window.addEventListener('resize', function () { applySize(); draw(); });
+
+/* ---------- 启动 ---------- */
+applySize();
+reset();
+})();
+</script>
+</body>
+</html>
