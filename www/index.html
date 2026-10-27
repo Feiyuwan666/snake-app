@@ -2,16 +2,18 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>贪吃蛇</title>
 <style>
   html, body { margin: 0; padding: 0; height: 100%; background: #111; overflow: hidden;
     touch-action: none; -webkit-user-select: none; user-select: none;
     -webkit-tap-highlight-color: transparent; }
   #wrap { height: 100%; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; font-family: sans-serif; color: #eee; }
+    justify-content: center; font-family: sans-serif; color: #eee;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    box-sizing: border-box; }
   #score { margin-bottom: 10px; font-size: 18px; color: #9f9; }
-  canvas { background: #000; border-radius: 10px; box-shadow: 0 0 24px rgba(90,255,130,.15); }
+  canvas { background: #000; border-radius: 10px; box-shadow: 0 0 24px rgba(90,255,130,.15); display: block; }
   #tip { margin-top: 12px; font-size: 13px; color: #777; }
 </style>
 </head>
@@ -19,7 +21,7 @@
 <div id="wrap">
   <div id="score">得分: 0 · 最高: 0</div>
   <canvas id="game"></canvas>
-  <div id="tip">滑动屏幕或按方向键控制</div>
+  <div id="tip">滑动屏幕控制方向</div>
 </div>
 <script>
 (function () {
@@ -31,7 +33,9 @@ var scoreEl = document.getElementById('score');
 
 var GRID = 20;          // 20 x 20 个格子
 var CELL = 16;          // 每个格子的像素大小（自动按屏幕计算）
-var TICK = 150;         // 每步毫秒数，数字越小蛇跑得越快
+var BASE_TICK = 150;    // 初始速度：每步毫秒数，数字越小蛇跑得越快
+var MIN_TICK = 70;      // 最快到这里
+var TICK = BASE_TICK;
 
 var snake, dir, nextDir, food, score, best, timer = null;
 var state = 'ready';    // ready 准备 / playing 进行中 / over 结束
@@ -40,7 +44,9 @@ try { best = parseInt(localStorage.getItem('snake_best') || '0', 10) || 0; } cat
 
 /* ---------- 尺寸自适应 ---------- */
 function applySize() {
-  var size = Math.min(window.innerWidth - 24, window.innerHeight - 140);
+  var vw = document.documentElement.clientWidth || window.innerWidth;
+  var vh = document.documentElement.clientHeight || window.innerHeight;
+  var size = Math.min(vw - 24, vh - 150);
   CELL = Math.max(10, Math.floor(size / GRID));
   canvas.width = CELL * GRID;
   canvas.height = CELL * GRID;
@@ -52,6 +58,7 @@ function reset() {
   dir = { x: 1, y: 0 };
   nextDir = { x: 1, y: 0 };
   score = 0;
+  TICK = BASE_TICK;
   state = 'ready';
   if (timer) { clearInterval(timer); timer = null; }
   placeFood();
@@ -102,6 +109,12 @@ function tick() {
     }
     updateHud();
     placeFood();
+    // 每吃 5 个加速一档
+    if (score % 5 === 0 && TICK > MIN_TICK) {
+      TICK = Math.max(MIN_TICK, TICK - 10);
+      if (timer) { clearInterval(timer); }
+      timer = setInterval(tick, TICK);
+    }
   } else {
     snake.pop();
   }
@@ -143,7 +156,7 @@ function draw() {
   }
 
   if (state === 'ready') {
-    overlay('滑动屏幕或按方向键\n开始游戏');
+    overlay('滑动屏幕开始游戏');
   } else if (state === 'over') {
     overlay('游戏结束\n得分 ' + score + '\n点击屏幕重新开始');
   }
@@ -207,6 +220,10 @@ document.addEventListener('touchmove', function (e) { e.preventDefault(); }, { p
 document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 document.addEventListener('mousedown', function () { if (state === 'over') { reset(); } });
 window.addEventListener('resize', function () { applySize(); draw(); });
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden && timer) { clearInterval(timer); timer = null; }
+  else if (!document.hidden && state === 'playing' && !timer) { timer = setInterval(tick, TICK); }
+});
 
 /* ---------- 启动 ---------- */
 applySize();
