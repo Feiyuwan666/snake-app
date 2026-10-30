@@ -15,6 +15,11 @@
   #score { margin-bottom: 10px; font-size: 18px; color: #9f9; }
   canvas { background: #000; border-radius: 10px; box-shadow: 0 0 24px rgba(90,255,130,.15); display: block; }
   #tip { margin-top: 12px; font-size: 13px; color: #777; }
+  #autoBtn { position: absolute; top: 10px; right: 10px; z-index: 5;
+    padding: 6px 12px; font-size: 13px; font-family: sans-serif; color: #9f9;
+    background: rgba(20,20,20,.85); border: 1px solid rgba(90,255,130,.45);
+    border-radius: 16px; cursor: pointer; }
+  #autoBtn.on { color: #111; background: #9f9; }
 </style>
 </head>
 <body>
@@ -23,6 +28,7 @@
   <canvas id="game"></canvas>
   <div id="tip">滑动屏幕控制方向</div>
 </div>
+<button id="autoBtn" type="button">自动演示</button>
 <script>
 (function () {
 "use strict";
@@ -224,6 +230,96 @@ document.addEventListener('visibilitychange', function () {
   if (document.hidden && timer) { clearInterval(timer); timer = null; }
   else if (!document.hidden && state === 'playing' && !timer) { timer = setInterval(tick, TICK); }
 });
+
+/* ---------- 自动演示（寻路 AI，独立模块，不影响上面的玩法） ---------- */
+var autoOn = false;
+var autoBtn = document.getElementById('autoBtn');
+
+var keyOf = function (p) { return p.x + ',' + p.y; };
+
+// 用 BFS 找从蛇头到食物的最短路径；注意蛇尾这一格下一步会空出来，可以踩
+function autoStep() {
+  if (!snake || !food || snake.length === 0) { return null; }
+  var head = snake[0];
+  var blocked = {};
+  for (var i = 0; i < snake.length - 1; i++) { blocked[keyOf(snake[i])] = true; }
+
+  var prev = {};
+  prev[keyOf(head)] = null;
+  var queue = [head];
+  var reached = false;
+  while (queue.length > 0) {
+    var cur = queue.shift();
+    if (cur.x === food.x && cur.y === food.y) { reached = true; break; }
+    var DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (var d = 0; d < DIRS.length; d++) {
+      var nx = cur.x + DIRS[d][0], ny = cur.y + DIRS[d][1];
+      if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) { continue; }
+      var k = nx + ',' + ny;
+      if (blocked[k] || prev[k] !== undefined) { continue; }
+      prev[k] = { p: cur, dx: DIRS[d][0], dy: DIRS[d][1] };
+      queue.push({ x: nx, y: ny });
+    }
+  }
+
+  if (reached) {
+    // 从食物回溯到蛇头的第一步
+    var node = food, step = null;
+    while (true) {
+      var pr = prev[keyOf(node)];
+      if (!pr) { break; }
+      step = { dx: pr.dx, dy: pr.dy };
+      node = pr.p;
+      if (node.x === head.x && node.y === head.y) { break; }
+    }
+    return step;
+  }
+
+  // 没有通往食物的路：挑一个离墙最远的相邻空位，争取活久一点
+  var best = null, bestRoom = -1;
+  var DIRS2 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (var j = 0; j < DIRS2.length; j++) {
+    var ax = head.x + DIRS2[j][0], ay = head.y + DIRS2[j][1];
+    if (ax < 0 || ay < 0 || ax >= GRID || ay >= GRID) { continue; }
+    if (blocked[ax + ',' + ay]) { continue; }
+    var room = Math.min(ax, ay, GRID - 1 - ax, GRID - 1 - ay);
+    if (room > bestRoom) { bestRoom = room; best = { dx: DIRS2[j][0], dy: DIRS2[j][1] }; }
+  }
+  return best;
+}
+
+// 演示时每隔一拍由 AI 替玩家决定方向（走的是原版 setDir，规则完全一致）
+var autoTimer = setInterval(function () {
+  if (!autoOn || state !== 'playing') { return; }
+  var step = autoStep();
+  if (step) { setDir(step.dx, step.dy); }
+}, 20);
+
+function setAuto(on) {
+  autoOn = on;
+  autoBtn.className = on ? 'on' : '';
+  autoBtn.textContent = on ? '退出演示' : '自动演示';
+  if (on) {
+    if (state === 'over') { reset(); }
+    if (state === 'ready') { setDir(Math.abs(dir.x) === 1 ? 0 : 1, Math.abs(dir.x) === 1 ? 1 : 0); }
+  }
+}
+
+autoBtn.addEventListener('click', function (e) {
+  e.stopPropagation();
+  setAuto(!autoOn);
+});
+
+// 演示模式下蛇死了，停一拍自动重开，像屏保一样循环
+var autoOverAt = 0;
+setInterval(function () {
+  if (!autoOn) { autoOverAt = 0; return; }
+  if (state !== 'over') { autoOverAt = 0; return; }
+  if (autoOverAt === 0) { autoOverAt = Date.now(); return; }
+  if (Date.now() - autoOverAt < 1200) { return; }
+  reset();
+  setAuto(true);
+}, 250);
 
 /* ---------- 启动 ---------- */
 applySize();
